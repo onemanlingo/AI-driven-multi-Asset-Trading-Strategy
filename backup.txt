@@ -1,0 +1,184 @@
+import pandas as pd
+import numpy as np
+from datetime import datetime
+from sqlalchemy import create_engine
+
+from sklearn.ensemble import RandomForestClassifier
+import backtrader as bt
+
+import heapq
+
+
+
+engine = create_engine("postgresql+psycopg2://postgres:postgresvarun@localhost/stocks_db")
+
+# Sliding Window for SMA 
+def sliding_window_sma(prices, window=10):
+    if len(prices) < window:
+        return []
+    sma = []
+    window_sum = sum(prices[:window])
+    sma.append(window_sum / window)
+    for i in range(window, len(prices)):
+        window_sum += prices[i] - prices[i - window]
+        sma.append(window_sum / window)
+    return sma
+
+# RSI
+def compute_rsi(data, periods=14):
+    delta = data.diff()
+    gain = delta.where(delta > 0, 0).rolling(window=periods).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=periods).mean()
+    rs = gain / loss
+    rsi = 100 - (100 / (1 + rs))
+    return rsi
+
+
+# RandomForest Classifier for buy/sell/hold signals
+def train_rf_model(df):
+    features = pd.DataFrame()
+    features["sma_ratio"] = df["close"].rolling(10).mean() / df["close"].rolling(50).mean()
+    features["rsi"] = compute_rsi(df["close"], 14)
+    features["returns_5d"] = df["close"].pct_change(5)
+    features["volume"] = df["volume"]
+    target = (df["close"].shift(-1) > df["close"]).astype(int)  
+    train_data = features.dropna()
+    train_target = target[train_data.index]
+    train_size = int(0.8 * len(train_data))  
+    model = RandomForestClassifier(n_estimators=100, random_state=42)
+    model.fit(train_data.iloc[:train_size], train_target.iloc[:train_size])
+    return model
+
+
+# Priority queue of assets
+def select_top_signals(predictions, confidences, k=3):
+    heap = [(-conf, symbol) for symbol, conf in confidences.items() if symbol in predictions and predictions[symbol] == 1]
+    heapq.heapify(heap)
+    return [heapq.heappop(heap)[1] for _ in range(min(k, len(heap)))]
+
+
+# Dynamic Risk Management
+MIN_SHARES = 1
+MAX_SHARES = 50
+INCREMENT_SHARES = 2
+BASE_STOP_LOSS_PCT = 0.05  
+INCREMENT_STOP_LOSS_PCT = 0.005
+
+def adjust_risk(pnls, num_shares, stop_loss_pct, last_risk_change_index):
+    if len(pnls) > 40:  
+        monthly_pnl = pnls[-1] - pnls[-20]
+        if len(pnls) - last_risk_change_index > 20:
+            if monthly_pnl > 0:
+                num_shares = min(num_shares + INCREMENT_SHARES, MAX_SHARES)
+                stop_loss_pct = min(stop_loss_pct + INCREMENT_STOP_LOSS_PCT, 0.1)
+                print(f"Increasing trade size to {num_shares}, stop-loss to {stop_loss_pct*100}%")
+            elif monthly_pnl < 0:
+                num_shares = max(num_shares - INCREMENT_SHARES, MIN_SHARES)
+                stop_loss_pct = max(stop_loss_pct - INCREMENT_STOP_LOSS_PCT, 0.03)
+                print(f"Decreasing trade size to {num_shares}, stop-loss to {stop_loss_pct*100}%")
+            return num_shares, stop_loss_pct, len(pnls)
+    return num_shares, stop_loss_pct, last_risk_change_index
+
+
+# Back trader strat
+class SMACrossRSI(bt.Strategy):
+    params = (('sma1', 10), ('sma2', 50), ('rsi_period', 14))
+    def __init__(self):
+        self.num_shares = MIN_SHARES
+        self.stop_loss_pct = BASE_STOP_LOSS_PCT
+        self.last_risk_change_index = 0
+        self.pnls = []
+        self.models = {}
+        self.sma1 = {}
+        self.sma2 = {}
+        self.rsi = {}
+        self.orders = []
+        self.num_shares_history = []
+        for d in self.datas:
+            df = pd.read_sql("SELECT date, close, volume FROM ohlc WHERE symbol=%s ORDER BY date", engine, params=(d._name,))
+            self.models[d._name] = train_rf_model(df)
+            self.sma1[d._name] = sliding_window_sma(df["close"].values, self.p.sma1)
+            self.sma2[d._name] = sliding_window_sma(df["close"].values, self.p.sma2)
+            self.rsi[d._name] = bt.indicators.RSI(d.close, period=self.p.rsi_period)
+        
+
+    def next(self):
+        self.pnls.append(self.broker.getvalue() - self.broker.startingcash)
+        self.num_shares, self.stop_loss_pct, self.last_risk_change_index = adjust_risk(
+            self.pnls, self.num_shares, self.stop_loss_pct, self.last_risk_change_index
+        )
+        self.num_shares_history.append(self.num_shares)
+
+        predictions = {}
+        confidences = {}
+        for d in self.datas:
+            df = pd.read_sql("SELECT date, close, volume FROM ohlc WHERE symbol=%s ORDER BY date DESC LIMIT 100", engine, params=(d._name,))
+            features = pd.DataFrame()
+            features["sma_ratio"] = df["close"].rolling(10).mean() / df["close"].rolling(50).mean()
+            features["rsi"] = compute_rsi(df["close"], 14)
+            features["returns_5d"] = df["close"].pct_change(5)
+            features["volume"] = df["volume"]
+            X = features.dropna().iloc[-1:]
+            if not X.empty:
+                pred = self.models[d._name].predict(X)[0]
+                conf = self.models[d._name].predict_proba(X)[0][pred]
+                predictions[d._name] = pred
+                confidences[d._name] = conf
+
+        top_symbols = select_top_signals(predictions, confidences, k=3)
+
+        for d in self.datas:
+            pos = self.getposition(d).size
+            price_move = abs(d.close[0] / d.close[-1] - 1) if d.close[-1] != 0 else 0
+            if (d._name in top_symbols and
+                predictions.get(d._name) == 1 and
+                self.sma1[d._name][-1] > self.sma2[d._name][-1] and
+                self.rsi[d._name][0] < 40 and
+                price_move > 0.005):  # 0.5% price move
+                self.buy(data=d, size=self.num_shares)
+                self.orders.append(1)
+                print(f"Buy {d._name} at {d.close[0]}")
+            elif pos > 0 and (
+                self.sma1[d._name][-1] < self.sma2[d._name][-1] or
+                self.rsi[d._name][0] > 60 or
+                (d.close[0] / d.close[-1] - 1) < -self.stop_loss_pct):
+                self.sell(data=d, size=pos)
+                self.orders.append(-1)
+                print(f"Sell {d._name} at {d.close[0]}")
+            else:
+                self.orders.append(0)
+
+
+# Historcal VaR
+"""
+df = pd.read_sql("SELECT date, symbol, close FROM ohlc ORDER BY date", engine)
+returns = df.pivot(index="date", columns="symbol", values="close").pct_change()
+portfolio_returns = returns.mean(axis=1).dropna()
+var_95 = np.percentile(portfolio_returns, 5)
+print(f"95% VaR: {var_95*100:.2f}%")
+with open("results.txt", "a") as f:
+    f.write(f"95% VaR: {var_95*100:.2f}%\n")
+"""
+
+
+if __name__ == "__main__":
+    cerebro = bt.Cerebro()
+    symbols = ["AAPL", "MSFT", "GOOGL", "NVDA", "AMZN", "SPY", "QQQ"]
+    for symbol in symbols:
+        df = pd.read_sql("SELECT date, open, high, low, close, volume FROM ohlc WHERE symbol=%s ORDER BY date", engine, params=(symbol,))
+        df["date"] = pd.to_datetime(df["date"])
+        data_feed = bt.feeds.PandasData(dataname=df.set_index("date"))
+        cerebro.adddata(data_feed, name=symbol)
+    
+    cerebro.addstrategy(SMACrossRSI)
+    cerebro.addanalyzer(bt.analyzers.SharpeRatio, _name="sharpe")
+    cerebro.addanalyzer(bt.analyzers.DrawDown, _name="drawdown")
+    cerebro.addanalyzer(bt.analyzers.Returns, _name="returns")
+    cerebro.broker.setcash(100000)
+    results = cerebro.run()
+    sharpe = results[0].analyzers.sharpe.get_analysis().get("sharperatio", None)
+    drawdown = results[0].analyzers.drawdown.get_analysis().get("max", {}).get("drawdown", None)
+    returns = results[0].analyzers.returns.get_analysis().get("rnorm100", None)
+    print(f"Sharpe Ratio: {sharpe}")
+    print(f"Max Drawdown: {drawdown}%")
+    print(f"Annualized Return: {returns}%")

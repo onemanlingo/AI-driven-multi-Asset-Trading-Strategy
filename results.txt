@@ -1,0 +1,3 @@
+Sharpe Ratio: 1.0093899724927236
+Max Drawdown: 16.485409384655362%
+Annualized Return: 7.618092842399976%
