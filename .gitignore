@@ -2,3 +2,11 @@ venv/
 *.pyc
 __pycache__/
 data/*.csv
+# Ignore sensitive and unnecessary files
+.env
+settings.json
+*.env
+*.pkl
+*.db
+*.sqlite
+*.log

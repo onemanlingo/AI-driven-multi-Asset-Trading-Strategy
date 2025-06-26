@@ -1,0 +1,30 @@
+{
+  "index": [
+    "^OMXSPI",
+    "^OMX",
+    "^OMXC20",
+    "^OMXH25",
+    "^OMXSBGI",
+    "^GSPC",
+    "^DJI",
+    "^IXIC",
+    "^FTSE",
+    "^GDAXI",
+    "^FCHI",
+    "^N225",
+    "^HSI",
+    "^STOXX50E",
+    "CL=F",
+    "BZ=F",
+    "GC=F",
+    "SI=F",
+    "HG=F",
+    "SEK=X",
+    "EURSEK=X",
+    "USDSEK=X",
+    "EURUSD=X",
+    "USDJPY=X",
+    "GBPUSD=X",
+    "CHFUSD=X"
+  ]
+}

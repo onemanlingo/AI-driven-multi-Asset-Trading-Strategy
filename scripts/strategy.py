@@ -1,3 +1,5 @@
+import os
+import json
 import pandas as pd
 import numpy as np
 from datetime import datetime
@@ -9,9 +11,12 @@ import backtrader as bt
 
 import heapq
 
+# Load settings
+SETTINGS_FILE = os.path.join(os.path.dirname(__file__), '../settings.json')
+with open(SETTINGS_FILE, 'r', encoding='utf-8') as f:
+    settings = json.load(f)
 
-
-engine = create_engine("postgresql+psycopg2://postgres:postgresvarun@localhost/stocks_db")
+engine = create_engine(f"postgresql+psycopg2://{settings['DB_USER']}:{settings['DB_PASS']}@{settings['DB_HOST']}/{settings['DB_NAME']}")
 
 # Sliding Window for SMA 
 def sliding_window_sma(prices, window=10):

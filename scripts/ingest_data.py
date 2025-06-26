@@ -1,19 +1,27 @@
+import os
+import json
 import yfinance as yf
 import psycopg2
 import pandas as pd
 from datetime import datetime
 
+# Load settings
+SETTINGS_FILE = os.path.join(os.path.dirname(__file__), '../settings.json')
+with open(SETTINGS_FILE, 'r', encoding='utf-8') as f:
+    settings = json.load(f)
 
 symbols = ["AAPL", "MSFT", "GOOGL", "NVDA", "AMZN", "SPY", "QQQ"]
-start_date = "2020-05-21"
-end_date = "2025-05-21"
+start_date = settings.get("START_DATE", "2020-05-21")
+end_date = settings.get("END_DATE", "2025-05-21")
+if end_date == "today":
+    end_date = datetime.today().strftime('%Y-%m-%d')
 
-
+# Download data
 data = yf.download(symbols, start=start_date, end=end_date, interval="1d")
 
 # Connect to PostgreSQL
 try:
-    conn = psycopg2.connect(dbname="stocks_db", user="postgres", password="postgresvarun", host="localhost")
+    conn = psycopg2.connect(dbname=settings["DB_NAME"], user=settings["DB_USER"], password=settings["DB_PASS"], host=settings["DB_HOST"])
     cursor = conn.cursor()
 
     # Ingest data 
