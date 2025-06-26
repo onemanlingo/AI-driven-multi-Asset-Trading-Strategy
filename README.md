@@ -1,67 +1,77 @@
-# Trading Strategy Prototype
-AI-driven multi-asset trading strategy using SMA Crossover, RSI, Random Forest, Priority Queue, and dynamic risk.
-## Features
-- Data: 5 years OHLC (2020–2025) for AAPL, MSFT, GOOGL, NVDA, AMZN, SPY, QQQ.
-- Storage: PostgreSQL (stocks_db).
-- Strategy: SMA (10/50), RSI (40/60), Random Forest, Trailing Stop (3%).
-- DSA: Priority Queue.
-- Risk: Dynamic trade size (1–50 shares), stop-loss (3–10%), VaR (95%).
-- Metrics: Sharpe ~1.01 (target 1.2), Return ~7.62% (target 8%).
-## Setup
+# AI-Driven Multi-Asset Trading Strategy
+
+A robust, modular, and extensible platform for research and live-trading of multi-asset portfolios using technical analysis, machine learning, and dynamic risk management.
+
+## Key Features
+- **Data Coverage:** Stocks, indices, and forex (configurable via `tickers.json` and `index.json`).
+- **Data Pipeline:** Automated OHLCV download, technical indicator (TA) feature engineering, and RL-ready dataset creation via `build_dataset.py`.
+- **Database:** PostgreSQL for persistent storage of historical data and results.
+- **Strategies:**
+  - SMA Crossover (10/50)
+  - RSI (40/60)
+  - Random Forest ML signals
+  - Trailing Stop (3%)
+  - Priority Queue for asset selection
+  - Dynamic risk (trade size, stop-loss, VaR)
+- **Metrics:** Sharpe ratio, annualized return, max drawdown, VaR, and more.
+- **Dashboard:** Interactive analytics and visualization with Dash/Plotly.
+
+## Project Structure
+- `settings.json` — All user-editable configuration (DB, data, dates, etc.)
+- `requirements.txt` — All dependencies (see below)
+- `scripts/` — All main scripts:
+  - `build_dataset.py` — Download, update, and feature-engineer all assets
+  - `ingest_data.py` — Ingest data into PostgreSQL
+  - `strategy.py` — Run backtests and ML strategies
+  - `risk.py` — Portfolio risk and VaR analysis
+  - `dashboard.py` — Interactive dashboard
+  - `validate_data.py` — Data quality checks
+- `tickers.json` / `index.json` — Asset lists
+- `data/` — All local CSVs and RL datasets (auto-generated)
+
+## Quickstart
 ```bash
+# 1. Install dependencies in a virtual environment
 pip install -r requirements.txt
+
+# 2. Configure your environment
+# Edit settings.json for DB, data directory, and date range
+
+# 3. Download and process all data
+python scripts/build_dataset.py
+
+# 4. Ingest data to PostgreSQL (optional)
 python scripts/ingest_data.py
+
+# 5. Run backtest/strategy
 python scripts/strategy.py
+
+# 6. Analyze risk
 python scripts/risk.py
+
+# 7. Launch dashboard
 python scripts/dashboard.py
 ```
 
-## Robustness & Security Improvements
+## Security & Best Practices
+- All sensitive config is in `settings.json` (excluded from git).
+- Never commit credentials or local data.
+- All scripts use robust error handling and input validation.
+- Logging is recommended for production.
+- Add tests for all critical logic.
 
-- **Environment Variables**: Database credentials and sensitive information should be set using environment variables or a configuration file. Example (Windows PowerShell):
-  ```powershell
-  $env:DB_USER = "postgres"
-  $env:DB_PASS = "yourpassword"
-  $env:DB_HOST = "localhost"
-  $env:DB_NAME = "stocks_db"
-  ```
-  Update your scripts to read these variables using `os.environ`.
-
-- **Error Handling**: All scripts now include improved error handling. Database connections and file operations use context managers (`with` statements) to ensure resources are always closed, even on error.
-
-- **Logging**: Print statements have been replaced or supplemented with logging for better traceability. You can further configure logging as needed.
-
-- **Directory Checks**: Scripts that write files (e.g., `download_data.py`) now check for the existence of the target directory and create it if missing.
-
-- **Input Validation**: Dataframes and database query results are validated before use to prevent runtime errors.
-
-- **Testing**: Add unit tests for critical functions (not included in this repo, but recommended for production use).
-
-- **Sensitive Data in Files**: All sensitive configuration (database credentials, etc.) is now stored in `settings.json`, which is excluded from version control via `.gitignore`. Never commit this file.
-
-- **User Configuration**: All user-settable options (database, data directory, date range, etc.) are now in `settings.json`. Edit this file to change your environment or data settings.
-
-- **Requirements**: Ensure your environment is up to date by running:
-  ```bash
-  pip install -r requirements.txt
-  ```
-
-- **.gitignore**: The repository now ignores sensitive files (`settings.json`, `.env`), data outputs, and unnecessary files for security and cleanliness.
-
-## Example: Secure Database Connection
+## Example: Loading Config in Python
 ```python
-import os
-import psycopg2
-conn = psycopg2.connect(
-    dbname=os.environ["DB_NAME"],
-    user=os.environ["DB_USER"],
-    password=os.environ["DB_PASS"],
-    host=os.environ["DB_HOST"]
-)
+import os, json
+with open('settings.json') as f:
+    settings = json.load(f)
 ```
 
-## General Recommendations
-- Never commit credentials to version control.
-- Use logging instead of print for production.
-- Validate all external data sources.
-- Add tests for all critical logic.
+## Requirements
+All dependencies are pinned in `requirements.txt`, including:
+- `ta` (technical analysis)
+- `yfinance`, `pandas`, `numpy`, `scikit-learn`, `SQLAlchemy`, `psycopg2-binary`, `backtrader`, `dash`, `plotly`, and more
+
+---
+
+For questions or contributions, open an issue or PR.
