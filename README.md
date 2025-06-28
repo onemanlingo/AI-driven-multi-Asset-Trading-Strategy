@@ -1,6 +1,8 @@
 # AI-Driven Multi-Asset Trading Strategy
 
-A robust, modular, and extensible platform for research and live-trading of multi-asset portfolios using technical analysis, machine learning, and dynamic risk management.
+A robust, modular, and extensible platform for research and simulation of multi-asset portfolios using technical analysis, machine learning, and dynamic risk management.
+
+> **Disclaimer:** This code is experimental and provided for research and educational purposes only. It is not intended for use with real money or in live trading environments. Use at your own risk.
 
 ## Key Features
 - **Data Coverage:** Stocks, indices, and forex (configurable via `tickers.json` and `index.json`).
@@ -18,8 +20,8 @@ A robust, modular, and extensible platform for research and live-trading of mult
 
 ## Project Structure
 - `settings.json` — All user-editable configuration (DB, data, dates, etc.)
-- `requirements.txt` — All dependencies (see below)
-- `scripts/` — All main scripts:
+- `requirements.txt` — All dependencies
+- `scripts/` — Main scripts:
   - `build_dataset.py` — Download, update, and feature-engineer all assets
   - `ingest_data.py` — Ingest data into PostgreSQL
   - `strategy.py` — Run backtests and ML strategies
@@ -74,4 +76,8 @@ All dependencies are pinned in `requirements.txt`, including:
 
 ---
 
-For questions or contributions, open an issue or PR.
+For questions, please open an issue.
+
+---
+
+I will now write this updated content to the README.md and commit it with an appropriate message.
