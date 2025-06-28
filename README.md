@@ -75,9 +75,3 @@ All dependencies are pinned in `requirements.txt`, including:
 - `yfinance`, `pandas`, `numpy`, `scikit-learn`, `SQLAlchemy`, `psycopg2-binary`, `backtrader`, `dash`, `plotly`, and more
 
 ---
-
-For questions, please open an issue.
-
----
-
-I will now write this updated content to the README.md and commit it with an appropriate message.
